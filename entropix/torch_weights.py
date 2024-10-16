@@ -72,7 +72,7 @@ def load_weights(ckpt_dir: Path = Path('weights/1B-Instruct'), n_layers: int = 1
         ffn_norm=w[f'layers.{i}.ffn_norm.weight'],
         attention_norm=w[f'layers.{i}.attention_norm.weight'],
       ))
-
+    
     xfmr_weights = XfmrWeights(
       tok_embeddings=w['tok_embeddings.weight'],
       norm=w['norm.weight'],

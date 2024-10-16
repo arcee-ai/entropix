@@ -81,6 +81,7 @@ def main(model_id: str, out_dir: Path):
     with patch("transformers.dynamic_module_utils.get_imports", fixed_get_imports):
       token = t_path.read_text().strip()
       hf_model = AutoModelForCausalLM.from_pretrained(model_id,torch_dtype=torch.bfloat16, offload_folder="/tmp/offload", token=token)
+
       with torch.no_grad():
         state_dict = hf_model.state_dict()
         for hf_name, param in state_dict.items():
