@@ -1,4 +1,10 @@
 from typing import NamedTuple, Optional, Tuple
+import time
+import sys
+from pathlib import Path
+
+# Add the parent directory of 'entropix' to the Python path
+sys.path.append(str(Path(__file__).parent.parent))
 
 import torch
 import torch.nn.functional as F
@@ -101,6 +107,7 @@ def main():
 
 
     def generate(xfmr_weights, model_params, tokens):
+      start_time = time.time()
       gen_tokens = None
       cur_pos = 0
       tokens = torch.tensor([tokens], dtype=torch.long).to(device)
@@ -122,8 +129,12 @@ def main():
         print(tokenizer.decode(next_token.tolist()[0]), end='', flush=True)
         if torch.isin(next_token, stop).any():
           break
-
-    print(prompt)
+      print("\n\n")
+      print("============")
+      end_time = time.time()
+      elapsed_time = end_time - start_time
+      print(f"\n\nGeneration completed in {elapsed_time:.2f} seconds.")
+          
     generate(xfmr_weights, model_params, raw_tokens1)
 
 if __name__ == '__main__':

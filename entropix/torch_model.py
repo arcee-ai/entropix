@@ -39,25 +39,42 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
 def attention(x: torch.Tensor, layer_weights: LayerWeights, model_params, cur_pos: int, layer_idx: int, freqs_cis: torch.Tensor, kvcache: KVCache, attn_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, KVCache, torch.Tensor]:
     bsz, _, _ = x.shape
     n_rep = model_params.n_local_heads // model_params.n_local_kv_heads
-    xq = F.linear(x, layer_weights.wq).reshape(bsz, -1, model_params.n_local_heads, model_params.head_dim)
-    xk = F.linear(x, layer_weights.wk).reshape(bsz, -1, model_params.n_local_kv_heads, model_params.head_dim)
-    xv = F.linear(x, layer_weights.wv).reshape(bsz, -1, model_params.n_local_kv_heads, model_params.head_dim)
+    
+    # Ensure x is on the correct device
+    x = x.to(device)
+    
+    xq = F.linear(x, layer_weights.wq.to(device)).reshape(bsz, -1, model_params.n_local_heads, model_params.head_dim)
+    xk = F.linear(x, layer_weights.wk.to(device)).reshape(bsz, -1, model_params.n_local_kv_heads, model_params.head_dim)
+    xv = F.linear(x, layer_weights.wv.to(device)).reshape(bsz, -1, model_params.n_local_kv_heads, model_params.head_dim)
+    
+    # Ensure freqs_cis is on the correct device
+    freqs_cis = freqs_cis.to(device)
+    
     xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
     keys, values, kvcache = kvcache.update(xk, xv, layer_idx, cur_pos, n_rep)
+    
     xq = torch.permute(xq, (0, 2, 1, 3))  # (bs, n_heads, seqlen, head_dim)
     keys = torch.permute(keys, (0, 2, 3, 1))  # (bs, n_heads, head_dim, cache_len + seqlen)
     values = torch.permute(values, (0, 2, 1, 3))  # (bs, n_heads, cache_len + seqlen, head_dim)
+    
+    # Ensure all tensors are on the same device before matmul
+    xq, keys, values = xq.to(device), keys.to(device), values.to(device)
+    
     scores = torch.matmul(xq, keys)
     pre_scores = scores / math.sqrt(model_params.head_dim)
     scores = pre_scores.to(torch.float32)  # Always do attention softmax at float32
-    if cur_pos == 0:
+    
+    if cur_pos == 0 and attn_mask is not None:
+        attn_mask = attn_mask.to(device)
         scores = scores + attn_mask
-    mask = torch.where(scores != 0.0, scores, DEFAULT_MASK_VALUE)
-    padded_logits = torch.where((mask >= DEFAULT_MASK_VALUE * 0.5), scores, DEFAULT_MASK_VALUE)
+    
+    mask = torch.where(scores != 0.0, scores, torch.tensor(DEFAULT_MASK_VALUE, device=device))
+    padded_logits = torch.where((mask >= DEFAULT_MASK_VALUE * 0.5), scores, torch.tensor(DEFAULT_MASK_VALUE, device=device))
     scores = F.softmax(padded_logits, dim=-1).to(torch.float32)
     output = torch.matmul(scores, values)
     output = output.transpose(1, 2).reshape(xq.shape[0], xq.shape[2], -1)
-    out = F.linear(output, layer_weights.wo)
+    out = F.linear(output, layer_weights.wo.to(device))
+    
     return out, kvcache, pre_scores
 
 def feed_forward(x: torch.Tensor, layer_weights: LayerWeights) -> torch.Tensor:
