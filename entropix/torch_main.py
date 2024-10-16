@@ -1,5 +1,5 @@
 from typing import NamedTuple, Optional, Tuple
-
+import time
 import sys
 from pathlib import Path
 
@@ -107,6 +107,7 @@ def main():
 
 
     def generate(xfmr_weights, model_params, tokens):
+      start_time = time.time()
       gen_tokens = None
       cur_pos = 0
       tokens = torch.tensor([tokens], dtype=torch.long).to(device)
@@ -118,7 +119,6 @@ def main():
       next_token = torch.argmax(logits[:, -1], dim=-1, keepdim=True).to(torch.int32)
       gen_tokens = next_token
       print(tokenizer.decode([next_token.item()]), end='', flush=True)
-      exit()
       cur_pos = seqlen
       stop = torch.tensor([128001, 128008, 128009], device=device, dtype=torch.int32)
       while cur_pos < 8192:
@@ -129,7 +129,12 @@ def main():
         print(tokenizer.decode(next_token.tolist()[0]), end='', flush=True)
         if torch.isin(next_token, stop).any():
           break
-
+      print("\n\n")
+      print("============")
+      end_time = time.time()
+      elapsed_time = end_time - start_time
+      print(f"\n\nGeneration completed in {elapsed_time:.2f} seconds.")
+          
     generate(xfmr_weights, model_params, raw_tokens1)
 
 if __name__ == '__main__':
